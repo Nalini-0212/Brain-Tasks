@@ -1,27 +1,75 @@
-# Brain Cluster Setup
-
 # 🚀 Brain Tasks Application – CI/CD Deployment on AWS EKS
 
 ---
 
 ## 📌 Project Overview
 
-This project demonstrates an end-to-end CI/CD pipeline to deploy a containerized application into **Amazon EKS (Kubernetes)** using:
+This project demonstrates the deployment of a production-ready React application using Docker and Kubernetes on Amazon EKS. The application is containerized with Docker, stored in Docker Hub, and automatically built and deployed through AWS CodePipeline and AWS CodeBuild. Monitoring is implemented using Amazon CloudWatch Logs and Container Insights.
 
-- AWS CodePipeline (CI/CD orchestration)
-- AWS CodeBuild (build & Docker image creation)
-- Docker (containerization)
-- Amazon EKS (deployment)
-- CloudWatch Logs & Container Insights (Monitoring)
+The objective is to automate the complete CI/CD pipeline from source code to deployment on a Kubernetes cluster.
 
 ---
 
-## 🏗️ Architecture
-GitHub → CodePipeline → CodeBuild (Build & Push)
-→ CodeBuild (Deploy) → Amazon EKS → LoadBalancer → Application
+## Project Architecture
+
+```
+
+GitHub Repository
+        │
+        ▼
+ AWS CodePipeline
+        │
+        ▼
+ AWS CodeBuild
+        │
+        ├── Build Docker Image
+        ├── Push Image to Docker Hub
+        └── Deploy to Amazon EKS
+                │
+                ▼
+        Kubernetes Deployment
+                │
+                ▼
+        Kubernetes Service (LoadBalancer)
+                │
+                ▼
+         React Application
+
+```
+
+---
+
+## Prerequisites
+
+Ensure the following tools are installed and configured before deploying the application:
+
+- Git
+- Docker
+- Docker Hub account
+- AWS CLI
+- kubectl
+- eksctl
+- AWS Account with required IAM permissions
+
+---
+
+## Technologies Used
+
+- React (Vite)
+- Docker
+- Docker Hub
+- Kubernetes
+- Amazon EKS
+- AWS CodeBuild
+- AWS CodePipeline
+- AWS CloudWatch
+- Git & GitHub
+
+---
 
 ## 📂 Project Structure
 
+```
 
 Brain-Tasks/
 │
@@ -48,23 +96,23 @@ Brain-Tasks/
 │
 └── README.md
 
----
-
-## ⚙️ AWS CI/CD Flow
-
-1. Code pushed to GitHub
-2. CodePipeline triggers automatically
-3. CodeBuild:
-   - Builds Docker image
-   - Pushes to DockerHub 
-4. Deploy to Kubernetes
-
+```
 
 ---
 
-## 🐳 Docker Setup
+# Clone Repository
 
-### Dockerfile
+```bash
+git clone https://github.com/Nalini-0212/Brain-Tasks.git
+
+cd Brain-Tasks
+```
+
+---
+
+# Docker
+
+## Dockerfile
 
 ```dockerfile
 FROM httpd:2.4-alpine
@@ -72,83 +120,280 @@ RUN rm -rf /usr/local/apache2/htdocs/*
 COPY dist/ /usr/local/apache2/htdocs/
 EXPOSE 80
 CMD ["httpd-foreground"]
+```
 
-### Build Docker Image
+### Build Image
 
-docker build -t braintasks:v1 -f app/Dockerfile .
+```bash
+cd app
+docker build -t <dockerhub-username>/braintask:latest .
+```
+Example
 
+```bash
+docker build -t naliniselv/braintask:latest .
+```
+OR
+
+USE below command
+
+```bash
+docker build -t naliniselv/braintask:latest -f app/Dockerfile .
+```
 ### Run Container
 
-docker run -d --name  braintasks-container -p 3000:80 braintasks:v1
+```bash
+docker run -d --name  braintasks-container -p 3000:80 naliniselv/braintask:latest
+```
 
 👉 Serves the application using Apache on port 80
 
-☸️ Kubernetes
+---
 
+Open
 
-kubectl apply -f k8s/
+```
+http://localhost:3000
+```
+
+---
+
+## Push Image to Docker Hub
+
+```bash
+docker login
+
+docker push naliniselv/braintask:latest
+```
+
+---
+
+## Docker Hub Repository
+
+Docker Image:
+
+```text
+docker.io/naliniselv/braintask:latest
+```
+
+---
+
+# Amazon EKS
+
+## Create EKS cluster
+
+---
+
+```bash
+eksctl create cluster --name brain-cluster --region us-east-1 --nodegroup-name brain-sg --node-type t2.medium --nodes 2
+```
+---
+
+## Configure kubectl
+
+```bash
+aws eks update-kubeconfig \
+--region us-east-1 \
+--name brain-cluster
+```
+
+---
+
+## Deploy Application
+
+```bash
+kubectl apply -f k8s/deployment.yaml
+
+kubectl apply -f k8s/service.yaml
+```
+
+---
+
+## Verify Deployment
+
+```bash
+kubectl get nodes
+
+kubectl get deployment
+
 kubectl get pods
 
+kubectl get svc
+```
+## Verification Output
 
+### Expected Output
 
-⚙️ CI/CD Pipeline Explanation
-✅ Stage 1: Source
+```bash
+kubectl get pods
+```
 
-Code is pulled from GitHub repository
+```
+NAME                                  READY   STATUS    RESTARTS
+brain-deployment-xxxxx                1/1     Running   0
+brain-deployment-yyyyy                1/1     Running   0
+brain-deployment-zzzzz                1/1     Running   0
+```
 
+```bash
+kubectl get svc
+```
 
-✅ Stage 2: Build (CodeBuild)
+```
+NAME            TYPE           EXTERNAL-IP
+brain-service   LoadBalancer   a29be4fc...
+```
 
-Builds Docker image from app/ folder
-Tags image dynamically:
+---
 
-V1.<CODEBUILD_BUILD_NUMBER>
+# CI/CD Pipeline
 
+The project uses AWS CodePipeline to automate deployments.
 
-Pushes image to DockerHub
-Generates:
+Pipeline Flow
 
-versions.txt
-image.txt
+```
+GitHub
+   │
+   ▼
+CodePipeline
+   │
+   ▼
+CodeBuild
+   │
+   ├── Build Docker Image
+   ├── Push Image to Docker Hub
+   ├── Update Kubernetes Manifest
+   └── Deploy to Amazon EKS
+```
 
+## CI/CD Pipeline Explanation
 
-✅ Stage 3: Deploy (CodeBuild)
+### Stage 1 – Source
+
+- Source code is retrieved from the GitHub repository through AWS CodePipeline.
+
+### Stage 2 – Build (AWS CodeBuild)
+
+- Builds the Docker image from the `app/` directory.
+- Tags the Docker image using the build number (`V1.<CODEBUILD_BUILD_NUMBER>`).
+- Pushes the image to Docker Hub.
+- Generates `versions.txt` and `image.txt`.
+
+### Stage 3 – Deploy
+
+- Updates the Kubernetes deployment.
+- Applies the Kubernetes manifests.
+- Performs a rolling update with zero downtime.
+
+```bash
 kubectl apply -f k8s/deployment.yaml
+
 kubectl apply -f k8s/service.yaml
-kubectl set image deployment/brain-deployment \ brain-container=$IMAGE_URL
+
+kubectl set image deployment/brain-deployment \
+brain-container=$IMAGE_URL
+
 kubectl rollout status deployment/brain-deployment
+```
 
 👉 Ensures zero-downtime rolling updates
 
-☸️ Kubernetes Deployment
-✅ Deployment
+## Kubernetes Resources
 
-3 replicas
-Rolling updates enabled
+### Deployment
 
-✅ Service
+- Replicas: 3
+- Container Image: Docker Hub
+- Container Port: 80
 
-Type: LoadBalancer
-Port mapping:
+### Service
 
-3000 → 80
+- Type: LoadBalancer
+- Service Port: 80
+- Target Port: 80
+---
 
-Application URL
+# Application URL
 
-http://a29be4fcfee3948b2a72c6225da8f3e9-811224438.us-east-1.elb.amazonaws.com:3000/
+http://a29be4fcfee3948b2a72c6225da8f3e9-811224438.us-east-1.elb.amazonaws.com/
 
-🔑 Kubernetes Cluster ARN
+---
+# Amazon EKS Cluster
+
+**Cluster Name**
+
+brain-cluster
+
+**Cluster ARN**
+
 arn:aws:eks:us-east-1:767397831600:cluster/brain-cluster
 
-📊 Monitoring (CloudWatch)
-✅ Build Logs
+---
+
+# AWS LoadBalancer ARN
+
+arn:aws:elasticloadbalancing:us-east-1:767397831600:loadbalancer/net/k8s-default-brain-service-xxxxxxxx
+
+---
+
+# AWS CodeBuild
+
+CodeBuild performs the following tasks:
+
+- Downloads source code
+- Builds Docker image
+- Logs in to Docker Hub
+- Pushes Docker image
+- Updates Kubernetes deployment manifest
+- Deploys application to Amazon EKS using kubectl
+
+Build specification file:
+
+```
+cicd/buildspec.yml
+```
+
+Deploy specification file:
+
+```
+cicd/buildspec-deploy.yml
+```
+
+---
+
+# Monitoring
+
+AWS CloudWatch Logs are used to monitor:
+
+- CodeBuild execution
+- Deployment logs
+- Build errors
+- Kubernetes deployment status
+
+## CloudWatch Monitoring
+
+CloudWatch is used to monitor the complete CI/CD workflow.
+
+### Build Logs
+
+```
 /aws/codebuild/brain-tasks
+```
 
-✅ Deploy Logs
+### Deployment Logs
+
+```
 /aws/codebuild/eks-deploy-brain-tasks
+```
 
-✅ Application Logs
+### Application Logs
+
+```
 /aws/containerinsights/brain-cluster/application
+```
+
+Container Insights is enabled using the Amazon CloudWatch Observability add-on to collect Kubernetes metrics and application logs.
 
 👉 Logs collected using:
 
@@ -158,59 +403,109 @@ CloudWatch Agent
 
 📊 Container Insights
 
-
+```bash
 aws eks create-addon \
   --cluster-name brain-cluster \
   --addon-name amazon-cloudwatch-observability \
   --region us-east-1
+```
 
 ✅ Verification Commands
 
-
+```bash
 kubectl get pods
-kubectl get svc
-kubectl logs -l app=brain
 
-# 📸 Screenshots
+kubectl get svc
+
+kubectl logs -l app=brain
+```
 
 ---
 
-### ✅ 1. CodePipeline Success
+# Useful Commands
 
- ![Pipeline Success](screenshots/pipeline.png)
+Docker
 
-👉 Shows all stages completed successfully (Source, Build, Deploy)
+```bash
+docker images
 
-✅ 2. Kubernetes Pods Running
-screenshots/pods.png
+docker ps
+```
 
-Output of:
+Kubernetes
+
+```bash
+kubectl get nodes
+
 kubectl get pods
 
-✅ 3. CloudWatch Logs
-screenshots/cloudwatch.png
-👉 Shows application logs from:
-/aws/containerinsights/brain-cluster/application
+kubectl get deployments
 
-✅ 4. Application Output
-screenshots/app-url.png
-👉 Application accessed via LoadBalancer
+kubectl get svc
 
-✅ Key Features
+kubectl describe deployment brain-deployment
 
-✅ End-to-end CI/CD pipeline
-✅ Dockerized application
-✅ Kubernetes deployment on AWS EKS
-✅ Dynamic image versioning
-✅ CloudWatch monitoring enabled
-✅ Container Insights enabled
+kubectl logs <pod-name>
+```
 
-🛠️ Author & Community
-This project is maintained by Nalini Selvaraj 💡. Your feedback and contributions are welcome!
+---
 
-📧 Connect with me:
+# 📸 Screenshots
+The following screenshots are included in the `screenshots/` folder:
 
-GitHub: @Nalini-0212
+| Screenshot | Description |
+|------------|-------------|
+| GitHub Repository | Source code repository |
+| Docker Hub | Docker image repository |
+| Amazon EKS | Running Kubernetes cluster |
+| Kubernetes Pods | Running application pods |
+| Kubernetes Service | LoadBalancer service |
+| CodeBuild | Successful build execution |
+| CodePipeline | Successful CI/CD pipeline |
+| CloudWatch Logs | Build and deployment logs |
+| Application | Running application in browser |
+
+---
+
+## Key Features
+
+- End-to-end CI/CD pipeline using AWS CodePipeline
+- Dockerized React application
+- Docker Hub image repository
+- Deployment on Amazon EKS
+- Kubernetes LoadBalancer service
+- Rolling updates with zero downtime
+- CloudWatch Logs monitoring
+- CloudWatch Container Insights
+
+---
+
+# Author
+
+**Nalini Selvaraj**
+
+- **GitHub Profile:** <https://github.com/Nalini-0212>
+- **Repository:** <https://github.com/Nalini-0212/Brain-Tasks>
+---
+
+# Conclusion
+
+This project demonstrates a complete DevOps CI/CD workflow for deploying a React application using Docker, Kubernetes, Amazon EKS, AWS CodeBuild, and AWS CodePipeline. The pipeline automates building, publishing, and deploying the application while CloudWatch provides centralized logging and monitoring.
+
+---
+
+## Project Status
+
+**Status:** Completed
+
+This project successfully demonstrates a complete CI/CD pipeline for deploying a Dockerized React application on Amazon EKS using AWS CodePipeline and CodeBuild. Monitoring is enabled through Amazon CloudWatch Logs and Container Insights.
+
+---
+
+
+
+
+
 
 
 
