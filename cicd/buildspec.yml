@@ -38,6 +38,6 @@ artifacts:
   files:
     - 'versions.txt'
     - 'image.txt'
-    - 'deployment.yaml'
-    - 'service.yaml'
-    - 'buildspec-deploy.yml'
+    - 'k8s/deployment.yaml'
+    - 'k8s/service.yaml'
+    - 'cicd/buildspec-deploy.yml'
