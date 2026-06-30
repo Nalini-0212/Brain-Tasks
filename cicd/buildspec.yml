@@ -24,7 +24,7 @@ phases:
   
   post_build:
     commands:
-      - "echo Pushing the docker images with versions...."
+      - "echo Pushing the docker images with versions....."
       - "docker push $IMAGE_URL"
       - "echo Pushing the docker image with latest tag"
       - "docker push $IMAGE_REPOSITORY_NAME:latest"
