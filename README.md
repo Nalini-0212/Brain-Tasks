@@ -8,17 +8,20 @@
 
 This project demonstrates an end-to-end CI/CD pipeline to deploy a containerized application into **Amazon EKS (Kubernetes)** using:
 
-- AWS CodePipeline
-- AWS CodeBuild
-- DockerHub
-- Amazon EKS
-- CloudWatch Logs & Container Insights
+- AWS CodePipeline (CI/CD orchestration)
+- AWS CodeBuild (build & Docker image creation)
+- Docker (containerization)
+- Amazon EKS (deployment)
+- CloudWatch Logs & Container Insights (Monitoring)
 
 ---
 
 ## 🏗️ Architecture
 GitHub → CodePipeline → CodeBuild (Build & Push)
 → CodeBuild (Deploy) → Amazon EKS → LoadBalancer → Application
+
+## 📂 Project Structure
+
 
 Brain-Tasks/
 │
@@ -47,6 +50,18 @@ Brain-Tasks/
 
 ---
 
+## ⚙️ AWS CI/CD Flow
+
+1. Code pushed to GitHub
+2. CodePipeline triggers automatically
+3. CodeBuild:
+   - Builds Docker image
+   - Pushes to DockerHub 
+4. Deploy to Kubernetes
+
+
+---
+
 ## 🐳 Docker Setup
 
 ### Dockerfile
@@ -58,7 +73,22 @@ COPY dist/ /usr/local/apache2/htdocs/
 EXPOSE 80
 CMD ["httpd-foreground"]
 
+### Build Docker Image
+
+docker build -t braintasks:v1 -f app/Dockerfile .
+
+### Run Container
+
+docker run -d --name  braintasks-container -p 3000:80 braintasks:v1
+
 👉 Serves the application using Apache on port 80
+
+☸️ Kubernetes
+
+
+kubectl apply -f k8s/
+kubectl get pods
+
 
 
 ⚙️ CI/CD Pipeline Explanation
