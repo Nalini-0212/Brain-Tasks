@@ -10,30 +10,89 @@ The objective is to automate the complete CI/CD pipeline from source code to dep
 
 ---
 
-## Project Architecture
+## 🏗️ Project Architecture
+
+```
+GitHub Repository
+        |
+        v
+AWS CodePipeline (CI/CD Orchestration)
+        |
+        v
+──────────── STAGE 1: BUILD ────────────
+        |
+        v
+AWS CodeBuild (Build Project)
+        |
+        ├── Build Docker Image
+        ├── Tag Image
+        └── Push to Docker Hub
+        |
+        v
+Docker Hub Registry
+        |
+        v
+Artifacts stored in S3
+(image.txt, versions.txt)
+        |
+        v
+──────────── STAGE 2: DEPLOY ───────────
+        |
+        v
+AWS CodeBuild (Deploy Project)
+        |
+        ├── Reads image from artifacts
+        ├── kubectl apply
+        ├── Update Deployment Image
+        └── Rollout Status Check
+        |
+        v
+Amazon EKS Cluster
+        |
+        v
+Kubernetes Deployment (Pods)
+        |
+        v
+Service (LoadBalancer)
+        |
+        v
+🌐 Application URL
+
+📊 Monitoring:
+- AWS CloudWatch Logs
+- Container Insights
 
 ```
 
-GitHub Repository
-        │
-        ▼
- AWS CodePipeline
-        │
-        ▼
- AWS CodeBuild
-        │
-        ├── Build Docker Image
-        ├── Push Image to Docker Hub
-        └── Deploy to Amazon EKS
-                │
-                ▼
-        Kubernetes Deployment
-                │
-                ▼
-        Kubernetes Service (LoadBalancer)
-                │
-                ▼
-         React Application
+📌 This architecture represents a fully automated CI/CD workflow from GitHub to Kubernetes deployment on AWS EKS.
+
+---
+
+
+## 📂 Project Structure
+
+```
+
+BrainTasks/
+│
+├── app/                         # Application + Docker
+│   ├── Dockerfile
+│   ├── dist/                   # React build files
+│
+├── cicd/                       # CI/CD pipeline config
+│   ├── buildspec.yml
+│   ├── buildspec-deploy.yml
+│
+├── k8s/                        # Kubernetes manifests
+│   ├── deployment.yaml
+│   ├── service.yaml
+│
+├── screenshots/                # Proof (important for evaluation)
+│
+├── docs/ (optional)            # Your Word/PDF explanation
+│   └── Application-Deployment.docx
+│
+└── README.md
 
 ```
 
@@ -67,45 +126,30 @@ Ensure the following tools are installed and configured before deploying the app
 
 ---
 
-## IAM Roles & Permissions
-This project uses IAM roles to securely enable communication between AWS services without hardcoding credentials.
-Roles Used
- ## CodePipeline Service Role
 
-Orchestrates pipeline execution
-Fetches source from GitHub
-Triggers CodeBuild
-Example:
-Role_name: AWSCodePipelineServiceRole-us-east-1-eks-deploy-pipeline
-### codepipeline-eks-deploy-pipeline-access-to-codebuild-deploy-policy
-create policy- give access to Build (StartBuildBatch,StartBuild,BatchGetBuilds) to specific deploy project (eks-deploy-brain-tasks)
+## 🔐 IAM Roles & Permissions
 
-## CodeBuild Service Role For Build Project (brain-tasks)
+This project uses IAM roles to securely enable communication between AWS services.
 
-Builds Docker images
-Pushes to Docker Hub
-Example: 
-Role_name: codebuild-brain-tasks-service-role 
-Provide Access to secrets manager secret for (GetSecretValue) Other than customer managed role.
+### CodePipeline Service Role
+- Orchestrates pipeline execution
+- Fetches source from GitHub
+- Triggers CodeBuild (StartBuildBatch,StartBuild,BatchGetBuilds)
 
-## CodeBuild Service Role For Deploy Project (eks-deploy-brain-tasks)
+### CodeBuild Role (Build Project)
+- Builds Docker images
+- Pushes images to Docker Hub
+- Uses AWS Secrets Manager for credentials (GetSecretValue)
 
-Pulls image from S3 bucket
-Deploy to EKS cluster
-
-Example: 
-Role_name: codebuild-eks-deploy-brain-tasks-service-role
-### codebuild-eks-deploy-brain-tasks-project-access-to-s3-policy
-create policy - Need Access to S3 bucket for (getobjects,listbuckets & getobjectversion) Other than customer managed policy-
-### codebuild-eks-deploy-brain-tasks-service-role-access-to-eks
-create policy- attach describe cluster & list-cluster to above policy needed to deploy workload on EKS.
-Add these two policy to Role_name mentioned above
+### CodeBuild Role (Deploy Project)
+- Deploys application to EKS
+- Requires:
+  - EKS permissions (DescribeCluster, ListClusters)
+  - S3 access (GetObject, ListBucket, GetObjectVersion) for retrieving build artifacts
 
 
-## EKS Node Group Role
-
-Add EKS Node Role [eksctl-brain-cluster-nodegroup-bra-NodeInstanceRole-aYxeLgsJ1mrR] to CloudWatchAgentServerPolicy to monitor cluster 
-
+### EKS Node Group Role
+- Attach policy CloudWatchAgentServerPolicy to monitor cluster 
 
 ## Kubernetes Access Role (aws-auth)
 
@@ -117,8 +161,6 @@ Download configmap aws-auth to file
 kubectl get configmap aws-auth -n kube-system -o yaml > aws-auth.yaml
 ```
 open in nano editor and paste under map role. Mention the code deploy service role
-
-
 
 ```bash
 mapRoles:
@@ -132,38 +174,6 @@ reapply using
 kubectl apply -f aws-auth.yaml
 ```
 Now aws-auth configMap is updated and now codebuild deploy role is able to access EKS cluster
-
-
-## 📂 Project Structure
-
-```
-
-BrainTasks/
-│
-├── app/                         # Application + Docker
-│   ├── Dockerfile
-│   ├── dist/                   # React build files
-│
-├── cicd/                       # CI/CD pipeline config
-│   ├── buildspec.yml
-│   ├── buildspec-deploy.yml
-│
-├── k8s/                        # Kubernetes manifests
-│   ├── deployment.yaml
-│   ├── service.yaml
-│
-├── screenshots/                # Proof (important for evaluation)
-│   ├── pipeline.png
-│   ├── pods.png
-│   ├── cloudwatch.png
-│   ├── app-url.png
-│
-├── docs/ (optional)            # Your Word/PDF explanation
-│   └── Application-Deployment.docx
-│
-└── README.md
-
-```
 
 ---
 
@@ -319,18 +329,21 @@ The project uses AWS CodePipeline to automate deployments.
 Pipeline Flow
 
 ```
+
 GitHub
    │
    ▼
 CodePipeline
    │
    ▼
-CodeBuild
+[Stage 1: Source]
    │
-   ├── Build Docker Image
-   ├── Push Image to Docker Hub
-   ├── Update Kubernetes Manifest
-   └── Deploy to Amazon EKS
+   ▼
+[Stage 2: Build - CodeBuild]
+   │
+   ▼
+[Stage 3: Deploy - CodeBuild]
+
 ```
 
 ## CI/CD Pipeline Explanation
@@ -348,9 +361,12 @@ CodeBuild
 
 ### Stage 3 – Deploy
 
+- Uses image reference from CodeBuild artifacts (stored in S3)
+- Pulls Docker image from Docker Hub
 - Updates the Kubernetes deployment.
 - Applies the Kubernetes manifests.
 - Performs a rolling update with zero downtime.
+
 
 ```bash
 kubectl apply -f k8s/deployment.yaml
@@ -641,32 +657,31 @@ kubectl logs <pod-name>
 ---
 
 # 📸 Screenshots
-The following screenshots are included in the `screenshots/` folder:
 
-| Screenshot | Description |
-|------------|-------------|
-| GitHub Repository | Source code repository |
-| Docker Hub | Docker image repository |
-| Amazon EKS | Running Kubernetes cluster |
-| Kubernetes Pods | Running application pods |
-| Kubernetes Service | LoadBalancer service |
-| CodeBuild | Successful build execution |
-| CodePipeline | Successful CI/CD pipeline |
-| CloudWatch Logs | Build and deployment logs |
-| Application | Running application in browser |
+All screenshots are available in the `screenshots/` folder:
+
+- GitHub Repository
+- Docker Hub Image
+- Amazon EKS Cluster
+- Kubernetes Pods
+- Kubernetes Service (LoadBalancer)
+- AWS CodeBuild (Build Success)
+- AWS CodePipeline (Pipeline Execution)
+- CloudWatch Logs
+- Application Output (Browser)
 
 ---
 
 ## Key Features
 
-- End-to-end CI/CD pipeline using AWS CodePipeline
+- End-to-end automated CI/CD pipeline
 - Dockerized React application
-- Docker Hub image repository
-- Deployment on Amazon EKS
-- Kubernetes LoadBalancer service
-- Rolling updates with zero downtime
-- CloudWatch Logs monitoring
-- CloudWatch Container Insights
+- Deployment on Amazon EKS (Kubernetes)
+- CI/CD using CodePipeline + CodeBuild
+- Zero-downtime rolling deployments
+- Secure IAM role-based access
+- Centralized logging using CloudWatch
+
 
 ---
 
@@ -675,7 +690,7 @@ The following screenshots are included in the `screenshots/` folder:
 **Nalini Selvaraj**
 
 - **GitHub Profile:** <https://github.com/Nalini-0212>
-- **Repository:** <https://github.com/Nalini-0212/Brain-Tasks>
+- **Repository:** <https://github.com/Nalini-0212/BrainTasks>
 ---
 
 ## Conclusion
