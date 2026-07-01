@@ -67,11 +67,79 @@ Ensure the following tools are installed and configured before deploying the app
 
 ---
 
+## IAM Roles & Permissions
+This project uses IAM roles to securely enable communication between AWS services without hardcoding credentials.
+Roles Used
+ ## CodePipeline Service Role
+
+Orchestrates pipeline execution
+Fetches source from GitHub
+Triggers CodeBuild
+Example:
+Role_name: AWSCodePipelineServiceRole-us-east-1-eks-deploy-pipeline
+### codepipeline-eks-deploy-pipeline-access-to-codebuild-deploy-policy
+create policy- give access to Build (StartBuildBatch,StartBuild,BatchGetBuilds) to specific deploy project (eks-deploy-brain-tasks)
+
+## CodeBuild Service Role For Build Project (brain-tasks)
+
+Builds Docker images
+Pushes to Docker Hub
+Example: 
+Role_name: codebuild-brain-tasks-service-role 
+Provide Access to secrets manager secret for (GetSecretValue) Other than customer managed role.
+
+## CodeBuild Service Role For Deploy Project (eks-deploy-brain-tasks)
+
+Pulls image from S3 bucket
+Deploy to EKS cluster
+
+Example: 
+Role_name: codebuild-eks-deploy-brain-tasks-service-role
+### codebuild-eks-deploy-brain-tasks-project-access-to-s3-policy
+create policy - Need Access to S3 bucket for (getobjects,listbuckets & getobjectversion) Other than customer managed policy-
+### codebuild-eks-deploy-brain-tasks-service-role-access-to-eks
+create policy- attach describe cluster & list-cluster to above policy needed to deploy workload on EKS.
+Add these two policy to Role_name mentioned above
+
+
+## EKS Node Group Role
+
+Allows EC2 worker nodes to run containers
+Communicates with AWS services
+
+
+## Kubernetes Access Role (aws-auth)
+
+Even with above IAM permission, EKS will reject access unless the role is mapped. You must add your CodeBuild deploy role into aws-auth ConfigMap
+
+Download configmap aws-auth to file
+
+```bash
+kubectl get configmap aws-auth -n kube-system -o yaml > aws-auth.yaml
+```
+open in nano editor and paste under map role. Mention the code deploy service role
+
+
+
+```bash
+mapRoles:
+  - rolearn: arn:aws:iam::187393210846:role/codebuild-eks-deploy-brain-tasks-service-role
+    username: codebuild
+    groups:
+      - system:masters
+```
+reapply using 
+```bash
+kubectl apply -f aws-auth.yaml
+```
+Now aws-auth configMap is updated and now codebuild deploy role is able to access EKS cluster
+
+
 ## 📂 Project Structure
 
 ```
 
-Brain-Tasks/
+BrainTasks/
 │
 ├── app/                         # Application + Docker
 │   ├── Dockerfile
@@ -100,7 +168,7 @@ Brain-Tasks/
 
 ---
 
-# Clone Repository
+## Clone Repository
 
 ```bash
 git clone https://github.com/Nalini-0212/Brain-Tasks.git
@@ -110,9 +178,9 @@ cd Brain-Tasks
 
 ---
 
-# Docker
+## Docker
 
-## Dockerfile
+### Dockerfile
 
 ```dockerfile
 FROM httpd:2.4-alpine
@@ -153,12 +221,12 @@ docker run -d --name  braintasks-container -p 3000:80 naliniselv/braintask:lates
 Open
 
 ```
-http://localhost:3000
+http://<server-ip>:3000
 ```
 
 ---
 
-## Push Image to Docker Hub
+### Push Image to Docker Hub
 
 ```bash
 docker login
@@ -168,7 +236,7 @@ docker push naliniselv/braintask:latest
 
 ---
 
-## Docker Hub Repository
+### Docker Hub Repository
 
 Docker Image:
 
@@ -178,18 +246,18 @@ docker.io/naliniselv/braintask:latest
 
 ---
 
-# Amazon EKS
+## Amazon EKS
 
-## Create EKS cluster
+### Create EKS cluster
 
 ---
 
 ```bash
-eksctl create cluster --name brain-cluster --region us-east-1 --nodegroup-name brain-sg --node-type t2.medium --nodes 2
+eksctl create cluster --name brain-cluster --region us-east-1 --nodegroup-name brain-ng --node-type t2.medium --nodes 2
 ```
 ---
 
-## Configure kubectl
+### Configure kubectl
 
 ```bash
 aws eks update-kubeconfig \
@@ -199,7 +267,7 @@ aws eks update-kubeconfig \
 
 ---
 
-## Deploy Application
+### Deploy Application
 
 ```bash
 kubectl apply -f k8s/deployment.yaml
@@ -209,7 +277,7 @@ kubectl apply -f k8s/service.yaml
 
 ---
 
-## Verify Deployment
+### Verify Deployment
 
 ```bash
 kubectl get nodes
@@ -220,19 +288,17 @@ kubectl get pods
 
 kubectl get svc
 ```
-## Verification Output
-
-### Expected Output
+### Verification Output
 
 ```bash
 kubectl get pods
 ```
 
 ```
-NAME                                  READY   STATUS    RESTARTS
-brain-deployment-xxxxx                1/1     Running   0
-brain-deployment-yyyyy                1/1     Running   0
-brain-deployment-zzzzz                1/1     Running   0
+NAME                                READY   STATUS    RESTARTS   AGE
+brain-deployment-6fddf44878-cdw9k   1/1     Running   0          63s
+brain-deployment-6fddf44878-hsg4f   1/1     Running   0          63s
+brain-deployment-6fddf44878-swxzb   1/1     Running   0          63s
 ```
 
 ```bash
@@ -240,13 +306,14 @@ kubectl get svc
 ```
 
 ```
-NAME            TYPE           EXTERNAL-IP
-brain-service   LoadBalancer   a29be4fc...
+NAME            TYPE           CLUSTER-IP       EXTERNAL-IP                                                              PORT(S)          AGE
+brain-service   LoadBalancer   10.100.178.149   a72d01bf965164b30aac84f8817c559f-872428231.us-east-1.elb.amazonaws.com   3000:30192/TCP   10m
+kubernetes      ClusterIP      10.100.0.1       <none>                                                                   443/TCP          22m
 ```
 
 ---
 
-# CI/CD Pipeline
+## CI/CD Pipeline
 
 The project uses AWS CodePipeline to automate deployments.
 
@@ -314,12 +381,12 @@ kubectl rollout status deployment/brain-deployment
 - Target Port: 80
 ---
 
-# Application URL
+## Application URL
 
-http://a29be4fcfee3948b2a72c6225da8f3e9-811224438.us-east-1.elb.amazonaws.com/
+http://a3622c24c46a6442cbde66803f36fa12-709266722.us-east-1.elb.amazonaws.com
 
 ---
-# Amazon EKS Cluster
+## Amazon EKS Cluster
 
 **Cluster Name**
 
@@ -327,17 +394,17 @@ brain-cluster
 
 **Cluster ARN**
 
-arn:aws:eks:us-east-1:767397831600:cluster/brain-cluster
+arn:aws:eks:us-east-1:187393210846:cluster/brain-cluster
 
 ---
 
-# AWS LoadBalancer ARN
+## AWS LoadBalancer ARN
 
-arn:aws:elasticloadbalancing:us-east-1:767397831600:loadbalancer/net/k8s-default-brain-service-xxxxxxxx
+arn:aws:elasticloadbalancing:us-east-1:187393210846:loadbalancer/a3622c24c46a6442cbde66803f36fa12
 
 ---
 
-# AWS CodeBuild
+## AWS CodeBuild
 
 CodeBuild performs the following tasks:
 
@@ -353,16 +420,125 @@ Build specification file:
 ```
 cicd/buildspec.yml
 ```
+Sample File:
+
+version: 0.2
+env:
+  variables:
+    IMAGE_REPOSITORY_NAME: "naliniselv/braintask"
+  secrets-manager:
+    DOCKERHUB_USERNAME: "dockerhubcred:username"
+    DOCKERHUB_PASSWORD: "dockerhubcred:password"
+
+phases:
+  pre_build:
+    commands:
+      - "echo Logging in to DockerHub..."
+      - "echo $DOCKERHUB_PASSWORD | docker login -u $DOCKERHUB_USERNAME --password-stdin"
+      - "export VERSION=V1.$CODEBUILD_BUILD_NUMBER"
+      - "export IMAGE_URL=$IMAGE_REPOSITORY_NAME:$VERSION"
+      - "echo Image_URL: '$IMAGE_URL'"
+      - "echo Build_Version: '$VERSION'"
+  build:
+    commands:
+      - "echo Building the Docker image....."
+      - "docker build -t $IMAGE_REPOSITORY_NAME:$VERSION -f app/Dockerfile ./app"
+      - "echo Tagging the Docker image....."
+      - "docker tag $IMAGE_REPOSITORY_NAME:$VERSION $IMAGE_REPOSITORY_NAME:latest"
+  
+  post_build:
+    commands:
+      - "echo Pushing the docker images with versions....."
+      - "docker push $IMAGE_URL"
+      - "echo Pushing the docker image with latest tag"
+      - "docker push $IMAGE_REPOSITORY_NAME:latest"
+      - "echo saving the version information to file"
+      - "echo $VERSION > versions.txt"
+      - "echo $IMAGE_URL > image.txt"
+    
+
+  
+artifacts:
+  files:
+    - 'versions.txt'
+    - 'image.txt'
+    - 'k8s/deployment.yaml'
+    - 'k8s/service.yaml'
+    - 'cicd/buildspec-deploy.yml'
+
 
 Deploy specification file:
 
 ```
 cicd/buildspec-deploy.yml
 ```
+Sample File:
 
+version: 0.2
+env:
+  variables:
+    CLUSTER_NAME: 'brain-cluster'
+    AWS_DEFAULT_REGION: 'us-east-1'
+phases:
+  install:
+    commands:
+      - "set -e"
+      - "echo Installing kubectl...."
+      - "curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+      - "curl -LO https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl.sha256"
+      - "echo $(cat kubectl.sha256)  kubectl | sha256sum --check"
+      - "chmod +x kubectl"
+      - "mkdir -p ~/.local/bin"
+      - "mv ./kubectl ~/.local/bin/kubectl"
+      - "export PATH=$PATH:/root/.local/bin"
+  pre_build:
+    commands:
+      - "echo Cluster Name: '$CLUSTER_NAME'"
+      - "echo Region: '$AWS_DEFAULT_REGION'"
+      - "aws sts get-caller-identity"
+      - "aws eks list-clusters --region $AWS_DEFAULT_REGION"
+      - "echo checking contents"
+      - "ls -ltr"
+      - "echo Loading version info..."
+      - "export VERSION=$(cat versions.txt)"
+      - "export IMAGE_URL=$(cat image.txt)"
+      - "echo Deploying Version: '$VERSION'"
+      - "echo Image URL: '$IMAGE_URL'"
+      - "echo Updating kubeconfig for the cluster ...."
+      - "aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $CLUSTER_NAME"
+      - "echo checking the nodes in the cluster......"
+      - "kubectl get nodes"
+
+  build:
+    commands:
+      - "echo Applying manifests files to the cluster....."
+      - "kubectl apply -f k8s/deployment.yaml"
+      - "kubectl apply -f k8s/service.yaml"
+      - "echo Updating image dynamically..."
+      - "kubectl set image deployment/brain-deployment brain-container=$IMAGE_URL"
+
+  post_build:
+    commands:
+      - "echo Checking the deployments in the cluster....."
+      - "kubectl get deployments"
+      - "echo Checking deployed image..."
+      - "kubectl describe deployment brain-deployment | grep Image"
+      - "echo getting status of pods in the cluster....."
+      - "kubectl get pods"
+      - "echo checking the rollout status of the deployment....."
+      - "kubectl rollout status deployment/brain-deployment"
+      - "echo Waiting additional 20 seconds for stability..."
+      - "sleep 20"
+      - "echo Final pod status:"
+      - "kubectl get pods -o wide"
+      - "echo getting pod logs"
+      - "kubectl logs -l app=brain"
+      - "echo getting services in the cluster....."
+      - "kubectl get svc brain-service"
+      - "echo Deployment and Service created successfully"
 ---
 
-# Monitoring
+## Monitoring
 
 AWS CloudWatch Logs are used to monitor:
 
@@ -410,7 +586,7 @@ aws eks create-addon \
   --region us-east-1
 ```
 
-✅ Verification Commands
+## Verification Commands
 
 ```bash
 kubectl get pods
@@ -422,14 +598,22 @@ kubectl logs -l app=brain
 
 ---
 
-# Useful Commands
+## Useful Commands
 
 Docker
 
 ```bash
-docker images
+docker images #to check docker images
 
-docker ps
+docker ps #to check running containers
+
+docker ps -a #to check all containers
+
+docker stop <container-name> #to stop particular container
+
+docker rm <container-name> #to remove container
+
+docker rmi <image-name> #to remove image
 ```
 
 Kubernetes
@@ -480,7 +664,7 @@ The following screenshots are included in the `screenshots/` folder:
 
 ---
 
-# Author
+## Author
 
 **Nalini Selvaraj**
 
@@ -488,7 +672,7 @@ The following screenshots are included in the `screenshots/` folder:
 - **Repository:** <https://github.com/Nalini-0212/Brain-Tasks>
 ---
 
-# Conclusion
+## Conclusion
 
 This project demonstrates a complete DevOps CI/CD workflow for deploying a React application using Docker, Kubernetes, Amazon EKS, AWS CodeBuild, and AWS CodePipeline. The pipeline automates building, publishing, and deploying the application while CloudWatch provides centralized logging and monitoring.
 
